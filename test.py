@@ -2,7 +2,7 @@ import time
 from datetime import datetime
 from Display import Display
 
-display = Display(port="COM9") # настройка com-порта
+display = Display(port="COM8") # настройка com-порта
 
 while True:
     now = datetime.now()
