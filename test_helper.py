@@ -1,13 +1,14 @@
-from display_helper import DisplayHelper
+from display_helper import Display, DisplayWithBuffer
 
-dis = DisplayHelper("COM8")
+
+dis = DisplayWithBuffer("COM16")
+
 
 dis.clear()
 
-dis.print_text("1")
-print(dis.get_cursor_position())
-dis.print_text("123456789123456789123")
-print(dis.get_cursor_position())
+
+dis.print_line("123")
+
 
 dis.print_data()
 
