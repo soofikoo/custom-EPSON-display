@@ -115,8 +115,8 @@ class DisplayWithBuffer(Display):
         self.__clear_data()
 
     def print_line(self, line):
-        super().print_line(line)
         self.__set_data(line)
+        super().print_line(line)
 
     def __set_data(self, data : str):
         """Update the data in lines"""
