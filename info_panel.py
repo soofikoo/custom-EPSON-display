@@ -128,6 +128,9 @@ class GuiInfoPanel:
     def on_weather(self,icon, item):
         self.__command_queue.put("weather")
 
+    def on_auto_switch(self,icon, item):
+        self.__command_queue.put("auto_switch_mode")
+
     def on_exit(self,icon, item):
         self.__command_queue.put("exit")
         icon.stop()
@@ -139,6 +142,7 @@ class GuiInfoPanel:
             menu=Menu(
                 MenuItem("Clock", self.on_clock),
                 MenuItem("Weather", self.on_weather),
+                MenuItem("AutoSwitch", self.on_auto_switch),
                 MenuItem("Exit", self.on_exit)
             ),
         )
@@ -160,7 +164,7 @@ class InfoPanel:
             self.__weather_service = None
 
     def set_mode(self, mode : str):
-        if mode == "weather" or mode == "clock":
+        if mode == "weather" or mode == "clock" or mode == "auto_switch_mode":
             self.__mode = mode
             self.__change = True
         else:
@@ -172,6 +176,7 @@ class InfoPanel:
         last_minute = -1
         while True:
             minutes = datetime.now().minute
+            seconds = datetime.now().second
 
             match self.__mode:
                 case "clock":
@@ -184,10 +189,24 @@ class InfoPanel:
                     if self.__change:
                         self.__display.clear()
                         self.print_weather()
+                case "auto_switch_mode":
+                    print(seconds % 60)
+                    if seconds % 60 == 31 or seconds % 60 == 1:
+                        self.__change = True
+                    if seconds % 60 < 30:
+                        if minutes != last_minute or self.__change:
+                            self.__display.clear()
+                            self.print_date()
+                            self.print_clock()
+                            last_minute = minutes
+                    if seconds % 60 > 30:
+                        if self.__change:
+                            self.__display.clear()
+                            self.print_weather()
 
             if self.__change:
                 self.__change = False
-            time.sleep(1)
+            time.sleep(0.5)
 
     def print_weather(self):
         if self.__weather_service is not None:
