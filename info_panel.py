@@ -210,7 +210,7 @@ class InfoPanel:
 
             if self.__change:
                 self.__change = False
-            sleep(0.5)
+            stop_event.wait(0.5)
 
     def print_weather(self):
         if self.__weather_service is not None:
