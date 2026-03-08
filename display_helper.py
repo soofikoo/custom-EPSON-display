@@ -2,7 +2,7 @@ import serial
 
 class Display:
     """Class for working with serial display"""
-    def __init__(self, display_name : str, baudrate : int =9600, code : str = "RU", max_row_size : int = 1, max_col_size : int = 19):
+    def __init__(self, display_name : str, baudrate : int =9600, code : str = "RU", max_row_size : int = 1, max_col_size : int = 20):
         self.__display = serial.Serial(port= display_name, baudrate=baudrate)
         self.__display_name = display_name
         self.__baudrate = baudrate

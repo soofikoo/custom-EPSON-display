@@ -1,8 +1,8 @@
 import time
 from pynput import keyboard
-from Display import Display
+from display_helper import Display
 
-display = Display(port="COM9")
+display = Display("COM9")
 
 counter = 0
 combo_active = False
@@ -12,8 +12,8 @@ def update_display():
     display.clear()
     display.print_line("Взорвано чурок: ")
     display.print_line(f"{counter}")
-    display.pere()
-    display.print_line("Today is great")
+    display.set_cursor_position(1,0)
+    display.print_line_endl("Today is great")
 
 def on_press(key):
     global counter, combo_active
