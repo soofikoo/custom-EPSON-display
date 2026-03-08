@@ -2,11 +2,13 @@ import queue
 import re
 import threading
 import time
+from abc import abstractmethod
 from datetime import datetime
 import tkinter as tk
 
 from queue import Queue
 from time import sleep
+from typing import Dict
 
 from PIL import Image
 from pystray import Icon, MenuItem, Menu
@@ -14,6 +16,73 @@ from pystray import Icon, MenuItem, Menu
 from display_helper import Display
 from info_services import WeatherService, SettingsService
 
+
+class Mode:
+    def __init__(self, display : Display):
+        self._display = display
+
+    @abstractmethod
+    def apply(self, force : bool):
+        pass
+
+class ClockMode(Mode):
+    def __init__(self, display : Display):
+        super().__init__(display)
+        self._last_update = 0
+
+    def print_date(self):
+        self._display.print_line_endl(datetime.now().strftime("%d.%m.%Y"))
+
+    def print_clock(self):
+        self._display.print_line_endl(datetime.now().strftime("%H:%M"))
+
+    def apply(self, force : bool = False):
+        minutes = datetime.now().minute
+        if minutes != self._last_update or force:
+            self._display.clear()
+            self.print_date()
+            self.print_clock()
+            self._last_update = minutes
+
+
+class WeatherMode(Mode):
+    def __init__(self, display : Display, weather_service : WeatherService):
+        super().__init__(display)
+        self._weather_service = weather_service
+
+    def print_weather(self):
+        if self._weather_service is not None:
+            data = self._weather_service.get_weather()
+            temperature = data["temperature"]
+            city = data["city"]
+
+            self._display.print_line_endl(city)
+            self._display.print_line_endl(str(temperature))
+        else:
+            self._display.print_line_endl("Нет api key")
+
+    def apply(self, force : bool = False):
+        self._display.clear()
+        self.print_weather()
+
+class AutoSwitchMode(Mode):
+    def __init__(self, display : Display, modes : Dict[str, Mode], change_period : int = 30):
+        super().__init__(display)
+        self._modes = modes
+        self._change_period = change_period
+        self._last_update = 0
+        self._last_mode : int = 0
+
+    def apply(self):
+        now = time.time()
+        if self._last_update + self._change_period < now:
+            modes_index = list(self._modes.keys())
+            size = len(modes_index)
+
+            self._modes.get(modes_index[self._last_mode % size]).apply()
+
+            self._last_update = now
+            self._last_mode += 1
 
 class AppInfoPanel:
     def __init__(self):
@@ -30,6 +99,8 @@ class AppInfoPanel:
         self.__thread_command_loop = None
         self.__thread_info_panel = None
         self.__stop_event = threading.Event()
+
+        self.__modes = None
 
     def __ask_input(self):
         root = tk.Tk()
@@ -147,87 +218,99 @@ class AppInfoPanel:
 
 
 class InfoPanel:
-    def __init__(self, display : Display, api_key_weather : str = None, weather_city : str = None ,mode : str = "clock"):
+    def __init__(self, display : Display, api_key_weather : str = None, weather_city : str = None):
         self.__display = display
         self.__api_key = api_key_weather
         self.__city = weather_city
-        self.__mode = mode
-        self.__change = True
-        self.__last_change = None
-        self.__last_mode = "weather"
-        self.__change_period = 30
 
         if api_key_weather is not None and weather_city is not None:
             self.__weather_service = WeatherService(api_key_weather, weather_city)
         else:
             self.__weather_service = None
 
+        self.__modes = self.init_modes()
+        self.__mode = self.__modes["clock"]
+
+    def init_modes(self):
+        modes = {
+            "clock" : ClockMode(self.__display),
+            "weather" : WeatherMode(self.__display, self.__weather_service),
+        }
+        modes["auto_switch_mode"] = AutoSwitchMode(self.__display, modes)
+        return modes
+
     def set_mode(self, mode : str):
         if mode == "weather" or mode == "clock" or mode == "auto_switch_mode":
-            self.__mode = mode
-            self.__change = True
+            self.__mode = self.__modes[mode]
         else:
             raise ValueError("Invalid mode, must be 'weather' or 'clock'")
 
-    def start(self, stop_event : threading.Event):
+    def start(self, stop_event: threading.Event):
         self.__display.clear()
-        last_minute = -1
-        while not stop_event.is_set():
-            minutes = datetime.now().minute
-            seconds = datetime.now().second
-            now_time = time.time()
-            match self.__mode:
-                case "clock":
-                    if minutes != last_minute or self.__change:
-                        self.__display.clear()
-                        self.print_date()
-                        self.print_clock()
-                        last_minute = minutes
-                case "weather":
-                    if self.__change:
-                        self.__display.clear()
-                        self.print_weather()
-                case "auto_switch_mode":
-                    if self.__last_change is None:
-                        self.__last_change = time.time()
-                    if now_time > self.__last_change + self.__change_period:
-                        self.__change = True
-                    if self.__last_mode == "weather":
-                        if minutes != last_minute or self.__change:
-                            self.__display.clear()
-                            self.print_date()
-                            self.print_clock()
-                            last_minute = minutes
-                            if self.__change:
-                                self.__last_mode = "clock"
-                                self.__last_change = now_time
-                    if self.__last_mode == "clock":
-                        if self.__change:
-                            self.__display.clear()
-                            self.print_weather()
-                            self.__last_mode = "weather"
-                            self.__last_change = now_time
 
-            if self.__change:
-                self.__change = False
+        while not stop_event.is_set():
+            self.__mode.apply()
             stop_event.wait(0.5)
 
-    def print_weather(self):
-        if self.__weather_service is not None:
-            data = self.__weather_service.get_weather()
-            temperature = data["temperature"]
-            city = data["city"]
-
-            self.__display.print_line_endl(city)
-            self.__display.print_line_endl(str(temperature))
-        else:
-            self.__display.print_line_endl("Нет api key")
-
-    def print_date(self):
-        self.__display.print_line_endl(datetime.now().strftime("%d.%m.%Y"))
-
-    def print_clock(self):
-        self.__display.print_line_endl(datetime.now().strftime("%H:%M"))
+    # def start(self, stop_event : threading.Event):
+    #     self.__display.clear()
+    #     last_minute = -1
+    #     while not stop_event.is_set():
+    #         minutes = datetime.now().minute
+    #         seconds = datetime.now().second
+    #         now_time = time.time()
+    #         match self.__mode:
+    #             case "clock":
+    #                 if minutes != last_minute or self.__change:
+    #                     self.__display.clear()
+    #                     self.print_date()
+    #                     self.print_clock()
+    #                     last_minute = minutes
+    #             case "weather":
+    #                 if self.__change:
+    #                     self.__display.clear()
+    #                     self.print_weather()
+    #             case "auto_switch_mode":
+    #                 if self.__last_change is None:
+    #                     self.__last_change = time.time()
+    #                 if now_time > self.__last_change + self.__change_period:
+    #                     self.__change = True
+    #                 if self.__last_mode == "weather":
+    #                     if minutes != last_minute or self.__change:
+    #                         self.__display.clear()
+    #                         self.print_date()
+    #                         self.print_clock()
+    #                         last_minute = minutes
+    #                         if self.__change:
+    #                             self.__last_mode = "clock"
+    #                             self.__last_change = now_time
+    #                 if self.__last_mode == "clock":
+    #                     if self.__change:
+    #                         self.__display.clear()
+    #                         self.print_weather()
+    #                         self.__last_mode = "weather"
+    #                         self.__last_change = now_time
+    #
+    #         if self.__change:
+    #             self.__change = False
+    #         stop_event.wait(0.5)
+    #
+    # def print_weather(self):
+    #     if self.__weather_service is not None:
+    #         data = self.__weather_service.get_weather()
+    #         temperature = data["temperature"]
+    #         city = data["city"]
+    #
+    #         self.__display.print_line_endl(city)
+    #         self.__display.print_line_endl(str(temperature))
+    #     else:
+    #         self.__display.print_line_endl("Нет api key")
+    #
+    # def print_date(self):
+    #     self.__display.print_line_endl(datetime.now().strftime("%d.%m.%Y"))
+    #
+    # def print_clock(self):
+    #     self.__display.print_line_endl(datetime.now().strftime("%H:%M"))
 
 
 class CommandListenerInfoPanel:
