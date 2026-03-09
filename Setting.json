@@ -1,7 +1,0 @@
-{
-    "com_port": "COM16",
-    "weather": {
-        "api_key": "6dbc4156bfa6c11d0a0c21962c448bd0",
-        "city": "Самара"
-    }
-}

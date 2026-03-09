@@ -1,9 +1,7 @@
 .idea
 .venv
-build
 
 InfoPanel/Setting.json
 dist/Setting.json
 
 __pycache__
-/build/
